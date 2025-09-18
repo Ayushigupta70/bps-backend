@@ -4,6 +4,7 @@ import {
   createBooking,
   updateBooking,
   deleteBooking,
+  getDeletedBookings,
   getBookingStatusList,
   getBookingRevenueList,
   activateBooking,
@@ -26,7 +27,8 @@ import {
   getAllCustomersPendingAmounts,
   receiveCustomerPayment,
   getInvoicesByFilter,
-  getIncomingBookings
+  getIncomingBookings,
+  restoreBooking
 } from '../controller/booking.controller.js';
 
 import { parseFormData } from "../middleware/multerParser.middleware.js";
@@ -56,7 +58,10 @@ router.patch('/:id/activate', activateBooking);
 router.patch('/:bookingId/cancel', cancelBooking);
 router.get('/:id', viewBooking);           // View by bookingId (not _id!)
 router.put('/:id', updateBooking);         // Update by bookingId
-router.delete('/:id', deleteBooking);      // Delete by bookingId
+//router.delete('/:id', deleteBooking);      // Delete by bookingId
+router.delete("/:id", deleteBooking);
+router.get("/recycle-bin", getDeletedBookings);
+router.patch('/:id/restore', restoreBooking);
 router.post('/overallBookingSummary', overallBookingSummary);
 router.post('/booking-summary', verifyJwt, getBookingSummaryByDate);
 router.post('/ca-report', getCADetailsSummary);

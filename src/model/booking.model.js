@@ -254,12 +254,21 @@ const BookingSchema = new mongoose.Schema(
     isDelivered: {
       type: Boolean,
       default: false,
+    },
+    isDeleted: {
+      type: Boolean,
+      default: false
+    },
+    deletedAt: {
+      type: Date,
+      default: null
     }
-
 
   },
   { timestamps: true }
 );
+
+BookingSchema.index({ deletedAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
 
 // Auto-generate booking ID
 BookingSchema.pre('validate', function (next) {

@@ -18,6 +18,7 @@ import {
   sendBookingEmail,
   sendBookingEmailById,
   getBookingSummaryByDate,
+  getIncomingQuotations
 
 
 } from "../controller/customerQuotation.controller.js";
@@ -67,5 +68,6 @@ router.put("/:bookingId", updateQuotation);
 router.delete("/:bookingId", deleteQuotation);
 
 router.get("/search/:bookingId", searchQuotationByBookingId);
-
+// Route to incoming quotation
+router.post("/qincoming", verifyJwt, getIncomingQuotations);
 export default router;

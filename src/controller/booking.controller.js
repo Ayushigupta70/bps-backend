@@ -117,7 +117,6 @@ export const viewBooking = async (req, res) => {
   }
 };
 
-
 export const createBooking = async (req, res) => {
 
   try {
@@ -477,24 +476,60 @@ export const updateBooking = async (req, res) => {
     res.status(400).json({ message: err.message });
   }
 };
-
 export const deleteBooking = async (req, res) => {
   try {
-    const { id } = req.params;
-
-    const deletedBooking = await Booking.findOneAndDelete({ bookingId: id });
-
-    if (!deletedBooking) {
-      return res.status(404).json({ message: "Booking not found" });
+    const booking = await Booking.findById(req.params.id);
+    if (!booking) {
+      return res.status(404).json({ success: false, message: "Booking not found" });
     }
 
-    res.status(200).json({
-      message: "Booking permanently deleted",
-      deletedBooking,
+    // Only soft delete
+    booking.isDeleted = true;
+    booking.deletedAt = new Date();
+    await booking.save();
+
+    res.json({
+      success: true,
+      message: "Booking moved to recycle bin (can be restored later)",
+      data: booking
     });
   } catch (err) {
-    console.error("Error deleting booking:", err);
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+export const getDeletedBookings = async (req, res) => {
+  try {
+    const deletedBookings = await Booking.find({ isDeleted: true });
+    res.json({
+      success: true,
+      message: "Deleted bookings fetched successfully",
+      data: deletedBookings
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+export const restoreBooking = async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.id);
+
+    if (!booking || !booking.isDeleted) {
+      return res.status(404).json({ success: false, message: "Booking not found in recycle bin" });
+    }
+
+    booking.isDeleted = false;
+    booking.deletedAt = null;
+    await booking.save();
+
+    res.json({
+      success: true,
+      message: "Booking restored successfully",
+      data: booking
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
 };
 
@@ -920,7 +955,7 @@ export const getBookingSummaryByDate = async (req, res) => {
       const grandTotal = booking.grandTotal || 0;
 
       const paidAmount =
-        booking.totalPaidAmount ||
+        booking.paidAmount ||
         booking.paidAmount ||
         (booking.payments?.reduce((sum, p) => sum + (p.amount || 0), 0)) ||
         0;
@@ -1195,6 +1230,10 @@ export const generateInvoiceByCustomer = async (req, res) => {
         }
       }
     });
+
+
+
+
     if (!customer) {
       return res.status(404).json({
         message: "Customer not found",
@@ -1266,26 +1305,16 @@ export const generateInvoiceByCustomer = async (req, res) => {
 
 export const getAllCustomersPendingAmounts = async (req, res) => {
   try {
-    // Step 1: Aggregate only delivered bookings
     const customerPayments = await Booking.aggregate([
-      {
-        $match: {
-          isDelivered: true // Filter only delivered bookings
-        }
-      },
       {
         $group: {
           _id: "$customerId",
           totalGrandTotal: { $sum: "$grandTotal" },
-          totalAmountPaid: { $sum: "$paidAmount" },
+          totalAmountPaid: { $sum: { $ifNull: ["$paidAmount", 0] } }, // handle missing paidAmount
           bookingCount: { $sum: 1 },
           unpaidBookings: {
             $sum: {
-              $cond: [
-                { $ne: ["$paymentStatus", "Paid"] },
-                1,
-                0
-              ]
+              $cond: [{ $ne: ["$paymentStatus", "Paid"] }, 1, 0]
             }
           }
         }
@@ -1298,9 +1327,7 @@ export const getAllCustomersPendingAmounts = async (req, res) => {
           as: "customer"
         }
       },
-      {
-        $unwind: "$customer"
-      },
+      { $unwind: "$customer" },
       {
         $project: {
           _id: 0,
@@ -1320,34 +1347,26 @@ export const getAllCustomersPendingAmounts = async (req, res) => {
               "$customer.lastName"
             ]
           },
-
           email: "$customer.emailId",
           contact: "$customer.contactNumber",
           totalBookings: "$bookingCount",
           unpaidBookings: "$unpaidBookings",
           totalAmount: "$totalGrandTotal",
           totalPaid: "$totalAmountPaid",
-          pendingAmount: { $subtract: ["$totalGrandTotal", "$totalAmountPaid"] },
-          lastBookingDate: 1 // Optional: Add actual booking date if needed
+          pendingAmount: { $subtract: ["$totalGrandTotal", "$totalAmountPaid"] }
         }
       },
-      {
-        $match: {
-          pendingAmount: { $gt: 0 } // Only customers who owe money
-        }
-      },
-      {
-        $sort: { pendingAmount: -1 } // Highest due first
-      }
+      { $match: { pendingAmount: { $gt: 0 } } },
+      { $sort: { pendingAmount: -1 } }
     ]);
-    // Step 2: Summary Stats
+
     const summary = {
       totalCustomers: customerPayments.length,
-      totalPendingAmount: customerPayments.reduce((sum, cust) => sum + cust.pendingAmount, 0),
+      totalPendingAmount: customerPayments.reduce((sum, c) => sum + c.pendingAmount, 0),
       customersWithUnpaidBookings: customerPayments.filter(c => c.unpaidBookings > 0).length,
       averagePendingPerCustomer:
         customerPayments.length > 0
-          ? customerPayments.reduce((sum, cust) => sum + cust.pendingAmount, 0) / customerPayments.length
+          ? customerPayments.reduce((sum, c) => sum + c.pendingAmount, 0) / customerPayments.length
           : 0
     };
 
@@ -1355,7 +1374,7 @@ export const getAllCustomersPendingAmounts = async (req, res) => {
       success: true,
       summary,
       customers: customerPayments,
-      message: `Found ${customerPayments.length} customers with pending payments (delivered only)`
+      message: `Found ${customerPayments.length} customers with pending payments`
     });
 
   } catch (err) {
@@ -1376,18 +1395,16 @@ export const receiveCustomerPayment = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Payment amount must be greater than 0");
   }
 
-  // Step 1: Fetch all delivered bookings with pending amount for this customer
+  // Find all bookings with pending amount (delivered OR not)
   const bookings = await Booking.find({
     customerId,
-    isDelivered: true,
-    $expr: { $lt: ["$paidAmount", "$grandTotal"] } // paidAmount < grandTotal
-  }).sort({ bookingDate: 1 }); // Oldest first
+    $expr: { $lt: [{ $ifNull: ["$paidAmount", 0] }, "$grandTotal"] }
+  }).sort({ bookingDate: 1 });
 
   if (!bookings.length) {
     throw new ApiError(404, "No pending bookings found for this customer");
   }
 
-  // Step 2: Apply payment
   let remainingPayment = amount;
 
   for (let booking of bookings) {
@@ -1396,12 +1413,10 @@ export const receiveCustomerPayment = asyncHandler(async (req, res) => {
     if (remainingPayment <= 0) break;
 
     if (remainingPayment >= pendingForBooking) {
-      // Fully pay this booking
       booking.paidAmount = booking.grandTotal;
       booking.paymentStatus = "Paid";
       remainingPayment -= pendingForBooking;
     } else {
-      // Partially pay this booking
       booking.paidAmount = (booking.paidAmount || 0) + remainingPayment;
       booking.paymentStatus = "Partial";
       remainingPayment = 0;
@@ -1410,23 +1425,15 @@ export const receiveCustomerPayment = asyncHandler(async (req, res) => {
     await booking.save();
   }
 
-  // Step 3: Calculate updated pending stats for the customer
   const updatedStats = await Booking.aggregate([
-    {
-      $match: {
-        customerId: bookings[0].customerId,
-        isDelivered: true
-      }
-    },
+    { $match: { customerId: bookings[0].customerId } },
     {
       $group: {
         _id: "$customerId",
         totalGrandTotal: { $sum: "$grandTotal" },
-        totalAmountPaid: { $sum: "$paidAmount" },
+        totalAmountPaid: { $sum: { $ifNull: ["$paidAmount", 0] } },
         unpaidBookings: {
-          $sum: {
-            $cond: [{ $ne: ["$paymentStatus", "Paid"] }, 1, 0]
-          }
+          $sum: { $cond: [{ $ne: ["$paymentStatus", "Paid"] }, 1, 0] }
         }
       }
     },
@@ -1440,6 +1447,7 @@ export const receiveCustomerPayment = asyncHandler(async (req, res) => {
       }
     }
   ]);
+
   res.status(200).json(
     new ApiResponse(
       200,
@@ -1452,6 +1460,7 @@ export const receiveCustomerPayment = asyncHandler(async (req, res) => {
     )
   );
 });
+
 export const getInvoicesByFilter = async (req, res) => {
   try {
     const { fromDate, toDate, startStation } = req.body;
@@ -1592,8 +1601,7 @@ export const getIncomingBookings = async (req, res) => {
     // let bookingFilter = { ...dateFilter };
     let bookingFilter = {
       ...dateFilter,
-      isDelivered: false,
-      activeDelived: false
+      
     };
 
     if (user.role === "supervisor") {
@@ -1628,5 +1636,3 @@ export const getIncomingBookings = async (req, res) => {
     res.status(500).json({ message: err.message || "Server error" });
   }
 };
-
-
