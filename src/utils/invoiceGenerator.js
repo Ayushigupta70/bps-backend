@@ -25,13 +25,13 @@ export const generateInvoicePDF = async (customer, bookings, invoiceNo) => {
         const dateOfBill = `${today.getDate()}-${today.getMonth() + 1}-${today.getFullYear()}`;
 
         // Title
-        doc.fontSize(16).text('TAX INVOICE', { align: 'center' });
+        doc.fontSize(16).text('BHARAT PARCEL SERVICES PVT. LTD.', { align: 'center' });
         y += 30;
 
         doc.fontSize(12).text(stationName, 50, y); y += lineHeight;
         doc.text(stationAddress, 50, y); y += lineHeight;
-        doc.text(`Phone No.: ${stationContact}`, 50, y); y += lineHeight;
-        doc.text(`GSTIN: ${stationGST}    PAN: AAECB6506F    SAC CODE: 9968`, 50, y); y += lineHeight + 10;
+        doc.text(`Phone Number: ${stationContact}`, 50, y); y += lineHeight;
+        doc.text(`GSTIN: 07AAECB6506F1ZY    PAN: AAECB6506F    SAC CODE: 9968`, 50, y); y += lineHeight + 10;
 
         // === PARTY DETAILS ===
         const fullName = `${customer.firstName || ''} ${customer.middleName || ''} ${customer.lastName || ''}`.trim() || 'Satyam Ray';
@@ -139,7 +139,7 @@ export const generateInvoicePDF = async (customer, bookings, invoiceNo) => {
 
         // === SUMMARY SECTION (Right side inside A4 width) ===
         const rightColX = 400; // 👈 fix starting X for right aligned section
-        const valueX = 510;    // 👈 all amounts end here
+        const valueX = 500;    // 👈 all amounts end here
 
         doc.font('Helvetica-Bold');
         doc.text(`AMOUNT TOTAL`, rightColX, y);
@@ -173,10 +173,10 @@ export const generateInvoicePDF = async (customer, bookings, invoiceNo) => {
 
         // Amount in words
         doc.text(`AMOUNT IN WORDS :- INR ${convertNumberToWords(grandTotal)} Only.`, 50, y);
-        y += lineHeight + 40;
+        y += rowHeight + 60;
 
         // Footer
-        doc.text('For Bharat Parcel Services Pvt.Ltd.', { align: 'right', });
+        doc.text('For Bharat Parcel Services Pvt.Ltd.', { align: 'right' }, y);
         y += lineHeight;
         doc.text('DIRECTOR', { align: 'right' });
 
