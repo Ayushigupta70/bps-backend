@@ -8,13 +8,12 @@ import nodemailer from "nodemailer";
 import bcrypt from "bcrypt"
 // Register a new user
 export const registerUser = asyncHandler(async (req, res) => {
-
   try {
     if (req.body.role === 'admin' && req.body.isBlacklisted === true) {
       throw new ApiError(400, "Admin users cannot be blacklisted");
     }
-    let userData = { ...req.body };
 
+    let userData = { ...req.body };
 
     if (req.files) {
       if (req.files['idProofPhoto']) {
@@ -31,12 +30,23 @@ export const registerUser = asyncHandler(async (req, res) => {
 
     const user = new User(userData);
     await user.save();
+
     res.status(201).json(new ApiResponse(201, "User registered successfully", user));
   } catch (error) {
-    console.log("error message", error.message);
-    throw new ApiError(400, "Registration failed", error.message);
+    console.log("error message", error);
+
+    // Handle MongoDB duplicate key error
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      const value = Object.values(error.keyValue)[0];
+      throw new ApiError(409, `${field} '${value}' already exists.`);
+    }
+
+    throw new ApiError(400, error.message || "Registration failed");
   }
 });
+
+
 export const loginUser = asyncHandler(async (req, res) => {
   try {
     const { emailId, password } = req.body;
