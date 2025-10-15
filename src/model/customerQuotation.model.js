@@ -144,18 +144,22 @@ const quotationSchema = new mongoose.Schema({
     type: String,
 
   },
+  orderId: {
+    type: String,
+    default: null
+  },
   isDelivered: {
-  type: Boolean,
-  default: false,
-},
-isDeleted: {
-      type: Boolean,
-      default: false
-    },
-    deletedAt: {
-      type: Date,
-      default: null
-    }
+    type: Boolean,
+    default: false,
+  },
+  isDeleted: {
+    type: Boolean,
+    default: false
+  },
+  deletedAt: {
+    type: Date,
+    default: null
+  }
 }, { timestamps: true });
 
 

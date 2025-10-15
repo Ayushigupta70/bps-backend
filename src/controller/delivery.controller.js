@@ -142,14 +142,11 @@ export const assignDelivery = asyncHandler(async (req, res) => {
     });
   }
   for (const quotationId of quotationIds) {
-    const quotation = await Quotation.findOne({ bookingId: quotationId })
-
+    const quotation = await Quotation.findOne({ bookingId: quotationId });
     if (!quotation) continue;
 
     const alreadyAssigned = await Delivery.findOne({ quotationId });
     if (alreadyAssigned) continue;
-
-    await Quotation.updateOne({ bookingId: quotationId }, { activeDelivery: true });
 
     const deliveryObj = {
       orderId: generateOrderId(),
@@ -172,7 +169,14 @@ export const assignDelivery = asyncHandler(async (req, res) => {
       orderBy: quotation.createdByRole || 'N/A',
       date: quotation.quotationDate?.toISOString().slice(0, 10) || 'N/A',
     });
+
+    // ✅ Update quotation here
+    await Quotation.updateOne(
+      { bookingId: quotationId },
+      { activeDelivery: true, orderId: deliveryObj.orderId }
+    );
   }
+
 
 
   // Handle quotationIds similarly if needed...

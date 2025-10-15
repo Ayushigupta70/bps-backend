@@ -9,6 +9,7 @@ import { QCustomer } from "../model/Qcustomer.model.js";
 import { parse } from 'date-fns';
 const formatQuotations = (quotations) => {
   return quotations.map((q, index) => ({
+    "orderId": q.orderId || 'N/A',
     "S.No.": index + 1,
     "Booking ID": q.bookingId,
     "orderBy": q.createdByRole === "admin"
