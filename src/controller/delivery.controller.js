@@ -105,7 +105,9 @@ export const assignDelivery = asyncHandler(async (req, res) => {
     const alreadyAssigned = await Delivery.findOne({ bookingId });
     if (alreadyAssigned) continue;
 
-    await Booking.updateOne({ bookingId }, { activeDelivery: true });
+    // 🟩 Save both activeDelivery and orderId inside Booking
+
+
 
     const deliveryObj = {
       orderId: generateOrderId(),
@@ -121,7 +123,10 @@ export const assignDelivery = asyncHandler(async (req, res) => {
       contact: booking.mobile || 'N/A',
     };
 
-
+    await Booking.updateOne(
+      { bookingId },
+      { activeDelivery: true, orderId: deliveryObj.orderId }
+    );
     deliveries.push(deliveryObj);
 
     responseData.push({

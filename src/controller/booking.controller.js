@@ -566,17 +566,18 @@ export const getBookingStatusList = async (req, res) => {
       };
     }
     const bookings = await Booking.find(filter)
-
-      .select('bookingId firstName lastName senderName receiverName bookingDate mobile startStation endStation requestedByRole')
+      .select('bookingId orderId firstName lastName senderName receiverName bookingDate mobile startStation endStation requestedByRole')
       .populate('startStation endStation', 'stationName')
       .populate('createdByRole', ' role')
       .lean();
+
 
     // Filter out bookings with missing station references
     const validBookings = bookings.filter(b => b.startStation && b.endStation);
 
     const data = validBookings.map((b, i) => ({
       SNo: i + 1,
+      orderId: b.orderId || 'N/A',
       orderBy:
         b.requestedByRole === 'public'
           ? 'Third Party'
@@ -1601,7 +1602,7 @@ export const getIncomingBookings = async (req, res) => {
     // let bookingFilter = { ...dateFilter };
     let bookingFilter = {
       ...dateFilter,
-      
+
     };
 
     if (user.role === "supervisor") {

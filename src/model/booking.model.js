@@ -223,6 +223,11 @@ const BookingSchema = new mongoose.Schema(
       type: Boolean,
       default: false
     },
+    orderId: {
+      type: String,
+      default: null
+    },
+
     totalCancelled: {
       type: Number,
       default: 0
