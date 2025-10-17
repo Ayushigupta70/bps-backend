@@ -26,32 +26,67 @@ const transporter = nodemailer.createTransport({
 });
 //base condition
 const getBookingFilterByType = (type, user) => {
-  let baseFilter = {};
+  let baseFilter = { isDeleted: false }; // Always include isDeleted: false
 
   if (type === 'active') {
-    baseFilter = { activeDelivery: true };
+    baseFilter.activeDelivery = true;
   } else if (type === 'cancelled') {
-    baseFilter = { totalCancelled: { $gt: 0 } };
+    baseFilter.totalCancelled = { $gt: 0 };
   } else {
-    baseFilter = {
-      activeDelivery: false,
-      totalCancelled: 0,
-      $or: [
-        { createdByRole: { $in: ['admin', 'supervisor'] } },
-        { requestedByRole: 'public', isApproved: true }
-      ]
-    };
+    // For 'request' type - bookings that are not active, not cancelled, and pending approval
+    baseFilter.$and = [
+      {
+        $or: [
+          { activeDelivery: false },
+          { activeDelivery: { $exists: false } } // Handle cases where field might not exist
+        ]
+      },
+      {
+        $or: [
+          { totalCancelled: 0 },
+          { totalCancelled: { $exists: false } } // Handle cases where field might not exist
+        ]
+      },
+      {
+        $or: [
+          // Admin/supervisor created bookings
+          { createdByRole: { $in: ['admin', 'supervisor'] } },
+          // Public requests that are approved OR pending approval
+          {
+            $or: [
+              { requestedByRole: 'public', isApproved: true },
+              { requestedByRole: 'public', isApproved: false } // Include pending approvals too
+            ]
+          },
+          // Fallback for any other cases
+          {
+            $and: [
+              { activeDelivery: false },
+              { totalCancelled: 0 }
+            ]
+          }
+        ]
+      }
+    ];
   }
 
+  // Add user-specific filtering for supervisors
   if (user?.role === 'supervisor') {
-    return {
-      $and: [
-        baseFilter,
-        { createdByUser: user._id }
-      ]
-    };
+    if (baseFilter.$and) {
+      // If we already have $and, add the user filter to it
+      baseFilter.$and.push({ createdByUser: user._id });
+    } else {
+      // Otherwise create a new $and condition
+      baseFilter = {
+        $and: [
+          baseFilter,
+          { createdByUser: user._id }
+        ]
+      };
+    }
   }
 
+  console.log(`Filter for type "${type}":`, JSON.stringify(baseFilter, null, 2));
   return baseFilter;
 };
 
@@ -562,26 +597,34 @@ export const getBookingStatusList = async (req, res) => {
     const { type } = req.query;
     let filter;
     const user = req.user;
-    if (type === 'active') {
-      filter = { activeDelivery: true };
-    } else if (type === 'cancelled') {
-      filter = { totalCancelled: { $gt: 0 } };
-    } else {
 
+    // Always include isDeleted: false in all filters
+    if (type === 'active') {
+      filter = {
+        activeDelivery: true,
+        isDeleted: false
+      };
+    } else if (type === 'cancelled') {
+      filter = {
+        totalCancelled: { $gt: 0 },
+        isDeleted: false
+      };
+    } else {
+      // For request bookings
       filter = {
         activeDelivery: false,
         isDelivered: { $ne: true },
         totalCancelled: 0,
+        isDeleted: false, // Added isDeleted: false here
         $or: [
-          { createdByRole: { $in: ['admin', 'supervisor'] } }, // Always include bookings created by admin/supervisor
-          { requestedByRole: 'public', isApproved: true }        // Only approved bookings created by public users
+          { createdByRole: { $in: ['admin', 'supervisor'] } },
+          { requestedByRole: 'public', isApproved: true }
         ]
-
-      }
-
+      };
     }
-    if (user.role === 'supervisor') {
 
+    // Add supervisor filter if applicable
+    if (user.role === 'supervisor') {
       filter = {
         $and: [
           filter,
@@ -589,15 +632,34 @@ export const getBookingStatusList = async (req, res) => {
         ]
       };
     }
+
+    console.log('Booking filter:', JSON.stringify(filter, null, 2)); // Debug log
+
     const bookings = await Booking.find(filter)
-      .select('bookingId orderId firstName lastName senderName receiverName bookingDate mobile startStation endStation requestedByRole')
+      .select('bookingId orderId firstName lastName senderName receiverName bookingDate mobile startStation endStation requestedByRole createdByRole isDeleted') // Added isDeleted to select
       .populate('startStation endStation', 'stationName')
-      .populate('createdByRole', ' role')
+      .populate('createdByRole', 'role')
       .lean();
 
+    // Debug: Check if any bookings have isDeleted: true
+    const deletedBookings = bookings.filter(b => b.isDeleted === true);
+    if (deletedBookings.length > 0) {
+      console.warn(`Found ${deletedBookings.length} deleted bookings in results:`);
+      console.warn(deletedBookings.map(b => ({
+        bookingId: b.bookingId,
+        isDeleted: b.isDeleted
+      })));
+    }
 
-    // Filter out bookings with missing station references
-    const validBookings = bookings.filter(b => b.startStation && b.endStation);
+    // Filter out bookings with missing station references AND ensure they're not deleted
+    const validBookings = bookings.filter(b =>
+      b.startStation &&
+      b.endStation &&
+      b.isDeleted === false // Double check isDeleted
+    );
+
+    console.log(`Total bookings found: ${bookings.length}`);
+    console.log(`Valid bookings after filtering: ${validBookings.length}`);
 
     const data = validBookings.map((b, i) => ({
       SNo: i + 1,
@@ -611,7 +673,6 @@ export const getBookingStatusList = async (req, res) => {
               ? `Supervisor (${b.startStation?.stationName || 'N/A'})`
               : `${b.createdByRole} ${b.startStation?.stationName || ''}`.trim() || 'N/A',
       date: b.bookingDate ? new Date(b.bookingDate).toLocaleDateString('en-CA') : 'N/A',
-
       fromName: b.senderName || 'N/A',
       pickup: b.startStation?.stationName || 'N/A',
       toName: b.receiverName || 'N/A',
@@ -625,10 +686,22 @@ export const getBookingStatusList = async (req, res) => {
       }
     }));
 
-    res.json({ count: data.length, data });
+    res.json({
+      success: true,
+      count: data.length,
+      data,
+      debug: {
+        totalFound: bookings.length,
+        validAfterFilter: validBookings.length,
+        hasDeletedBookings: deletedBookings.length > 0
+      }
+    });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: err.message });
+    console.error('Error in getBookingStatusList:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
   }
 };
 
