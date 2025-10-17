@@ -476,11 +476,24 @@ export const updateBooking = async (req, res) => {
     res.status(400).json({ message: err.message });
   }
 };
+// backend controller
 export const deleteBooking = async (req, res) => {
   try {
-    const booking = await Booking.findById(req.params.id);
+    let booking;
+
+    // Check if the ID is a MongoDB ObjectId (24 character hex string)
+    if (req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
+      booking = await Booking.findById(req.params.id);
+    } else {
+      // If not ObjectId, search by bookingId
+      booking = await Booking.findOne({ bookingId: req.params.id });
+    }
+
     if (!booking) {
-      return res.status(404).json({ success: false, message: "Booking not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Booking not found"
+      });
     }
 
     // Only soft delete
@@ -494,10 +507,21 @@ export const deleteBooking = async (req, res) => {
       data: booking
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.error('Delete booking error:', err);
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
   }
 };
-
+export const listDeletedBookings = async (req, res) => {
+  try {
+    const deletedBookings = await Booking.find({ isDeleted: true });
+    res.status(200).json({ count: deletedBookings.length, bookings: deletedBookings });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
 export const getDeletedBookings = async (req, res) => {
   try {
     const deletedBookings = await Booking.find({ isDeleted: true });

@@ -4,7 +4,6 @@ import {
   createBooking,
   updateBooking,
   deleteBooking,
-  getDeletedBookings,
   getBookingStatusList,
   getBookingRevenueList,
   activateBooking,
@@ -27,7 +26,7 @@ import {
   getAllCustomersPendingAmounts,
   receiveCustomerPayment,
   getInvoicesByFilter,
-  getIncomingBookings,
+  listDeletedBookings,
   restoreBooking
 } from '../controller/booking.controller.js';
 
@@ -41,7 +40,6 @@ router.get('/bookings/count/requests', verifyJwt, getBookingRequestsCount);
 router.get('/bookings/count/active', verifyJwt, getActiveDeliveriesCount);
 router.get('/bookings/count/cancelled', verifyJwt, getCancelledBookingsCount);
 router.get('/bookings/revenue/total', verifyJwt, getTotalRevenue);
-router.post("/incoming",verifyJwt, getIncomingBookings);
 router.post('/send-booking-email', sendBookingEmail);
 router.post('/send-booking-email/:bookingId', sendBookingEmailById);
 router.patch('/reject/:bookingId', rejectThirdPartyBookingRequest);
@@ -53,15 +51,17 @@ router.post('/payment/:customerId', receiveCustomerPayment)
 router.post('/public', createPublicBooking);
 router.get("/pending", verifyJwt, getPendingThirdPartyBookings);
 router.patch("/:bookingId/approve", verifyJwt, approveThirdPartyBookingRequest);
-router.post('/', verifyJwt, createBooking);           // Create a new booking
+router.post('/', verifyJwt, createBooking);
+// Create a new booking
+router.delete("/:id", deleteBooking);       // Move to bin
+router.patch("/:id/restore", restoreBooking); // Restore
+router.get("/bin/list", listDeletedBookings); // Get bin list
+
 router.patch('/:id/activate', activateBooking);
 router.patch('/:bookingId/cancel', cancelBooking);
 router.get('/:id', viewBooking);           // View by bookingId (not _id!)
 router.put('/:id', updateBooking);         // Update by bookingId
-//router.delete('/:id', deleteBooking);      // Delete by bookingId
-router.delete("/:id", deleteBooking);
-router.get("/recycle-bin", getDeletedBookings);
-router.patch('/:id/restore', restoreBooking);
+router.delete('/:id', deleteBooking);      // Delete by bookingId
 router.post('/overallBookingSummary', overallBookingSummary);
 router.post('/booking-summary', verifyJwt, getBookingSummaryByDate);
 router.post('/ca-report', getCADetailsSummary);
