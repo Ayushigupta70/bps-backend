@@ -133,7 +133,8 @@ export const createQuotation = asyncHandler(async (req, res, next) => {
       !product.name ||
       typeof product.quantity !== "number" ||
       typeof product.price !== "number" ||
-      typeof product.weight !== "number"
+      typeof product.weight !== "number" ||
+      typeof product.toPay !== "number"
     ) {
       return next(new ApiError(400, "Invalid product details"));
     }

@@ -120,6 +120,11 @@ const quotationSchema = new mongoose.Schema({
         type: Number,
         required: true
       },
+      toPay: {
+        type: String,
+        required: true,
+        enum: ['toPay', 'paid', 'none']
+      },
     },
   ],
 
